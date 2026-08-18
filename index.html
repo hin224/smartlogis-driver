@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartLogis - Driver & Terminal Control</title>
+    
+    <!-- Leaflet Map CSS & Chart.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #1a1a1a; color: white; padding-bottom: 20px; }
+
+        .status-bar { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: #2a2a2a; }
+        .btn-group button { padding: 10px 18px; font-size: 1rem; font-weight: bold; border: none; border-radius: 20px; cursor: pointer; margin-right: 10px; transition: all 0.2s; }
+        .btn-group button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-connect { background: #007bff; color: white; }
+        .btn-start { background: #10b981; color: white; }
+
+        /* Navigation Tab Styles */
+        .tab-nav { display: flex; background: #222; border-bottom: 2px solid #333; max-width: 1200px; margin: 10px auto 0 auto; }
+        .tab-btn { flex: 1; padding: 14px; text-align: center; background: none; border: none; font-size: 1rem; font-weight: bold; color: #888; cursor: pointer; transition: all 0.2s; }
+        .tab-btn.active { color: #00ffcc; border-bottom: 3px solid #00ffcc; background: #2a2a2a; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .emergency-overlay { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 800px; background: rgba(220, 38, 38, 0.95); border: 2px solid #facc15; border-radius: 12px; padding: 15px 20px; color: white; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+        .emergency-overlay h2 { font-size: 1.2rem; color: #facc15; }
+        .emergency-overlay button { align-self: flex-end; padding: 8px 16px; background: #facc15; color: black; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+
+        .main-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 15px; max-width: 1200px; margin: 0 auto; }
+        @media (max-width: 768px) { .main-container { grid-template-columns: 1fr; } }
+
+        .card-box { background: #2a2a2a; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+        .card-box h3 { margin-bottom: 12px; font-size: 1.1rem; color: #00ffcc; border-bottom: 1px solid #444; padding-bottom: 8px; }
+
+        .schedule-list { list-style: none; }
+        .schedule-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #333; margin-bottom: 8px; border-radius: 8px; border-left: 4px solid #007bff; }
+        .schedule-item.completed { border-left-color: #10b981; opacity: 0.5; }
+        .schedule-item.completed .task-text { text-decoration: line-through; }
+        .btn-done { padding: 6px 12px; font-size: 0.85rem; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+
+        #map { height: 280px; width: 100%; border-radius: 8px; background: #222; }
+
+        .telemetry-container { display: flex; gap: 15px; padding: 0 15px; max-width: 1200px; margin: 0 auto 15px auto; }
+        .data-box { flex: 1; background: #333; padding: 20px; border-radius: 12px; text-align: center; }
+        .value { font-size: 2.8rem; font-weight: bold; color: #00ffcc; }
+
+        .chart-scroll-wrapper { width: 100%; overflow-x: auto; }
+        .chart-inner-container { min-width: 500px; height: 220px; }
+
+        /* TAB 2: Maqueen Remote Controls */
+        .control-container { max-width: 600px; margin: 20px auto; padding: 0 15px; }
+        .emergency-btn { width: 100%; padding: 18px; background: #dc2626; color: white; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4); margin-bottom: 20px; }
+        .mode-group { display: flex; gap: 12px; margin-bottom: 25px; }
+        .mode-btn { flex: 1; padding: 14px; font-size: 1rem; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; color: white; }
+        .btn-mode-a { background: #10b981; }
+        .btn-mode-b { background: #d97706; }
+
+        /* Joystick Panel */
+        .joystick-panel { position: relative; width: 280px; height: 280px; margin: 0 auto; background: #222; border: 2px solid #444; border-radius: 50%; box-shadow: inset 0 4px 10px rgba(0,0,0,0.6); }
+        .dir-btn-lg { position: absolute; width: 72px; height: 72px; background: #333; color: #fff; font-size: 0.85rem; font-weight: bold; border: 2px solid #555; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .dir-btn-lg:active { background: #555; }
+        #btnLgTop    { top: 10px; left: 104px; }
+        #btnLgBottom { bottom: 10px; left: 104px; }
+        #btnLgLeft   { top: 104px; left: 10px; }
+        #btnLgRight  { top: 104px; right: 10px; }
+
+        .inner-circle-group { position: absolute; top: 90px; left: 90px; width: 100px; height: 100px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; align-items: center; justify-items: center; }
+        .step-btn-sm { width: 30px; height: 30px; background: #1e3a5f; color: #00ffcc; font-size: 0.75rem; border: 1px solid #00ffcc; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .center-stop-btn { width: 32px; height: 32px; background: #5c1d1d; color: #f87171; font-size: 0.8rem; font-weight: bold; border: 1px solid #f87171; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        .debug-console { max-width: 1200px; margin: 15px auto; padding: 12px; background: #111; border: 1px solid #333; border-radius: 8px; font-family: monospace; font-size: 0.8rem; color: #00ff66; height: 80px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <header class="status-bar">
+        <div class="btn-group">
+            <button id="connectBtn" class="btn-connect">1. Connect Vehicle Bluetooth</button>
+            <button id="startTaskBtn" class="btn-start" onclick="pullMyDispatchedTasks()">2. Sync Cloud Schedule</button>
+        </div>
+        
+        <!-- 🎯 关键新增：让司机可以选择/输入自己的车牌号 -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="driverCarIdSelect" style="font-size:0.85rem; color:#aaa;">Vehicle ID:</label>
+            <input type="text" id="driverCarIdSelect" value="REE_001" style="padding: 6px 10px; background: #111; border: 1px solid #444; color: #00ffcc; font-weight: bold; border-radius: 6px; width: 110px;" onchange="pullMyDispatchedTasks()">
+        </div>
+
+        <div style="font-size:0.9rem; color:#aaa;">Cloud Sync: <span id="dbStatus">⚪ Disconnected</span></div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab(1)">📊 Telemetry & Map</button>
+        <button class="tab-btn" onclick="switchTab(2)">🎮 Vehicle Controls</button>
+    </div>
+
+    <!-- Emergency Alert Overlay -->
+    <div id="emergencyAlert" class="emergency-overlay" style="display: none;">
+        <h2>⚠️ Cold-Chain / Obstacle Warning</h2>
+        <p id="emergencyMsg">Central Brain Alert: Temp spike detected or obstacle ahead!</p>
+        <button onclick="acceptNewRoute()">Acknowledge & Clear</button>
+    </div>
+
+    <!-- TAB 1: Live Telemetry, Temperature Chart & Map -->
+    <div id="tab1" class="tab-content active">
+        <div class="telemetry-container" style="margin-top: 15px;">
+            <div class="data-box" id="tempBox">
+                <p>Cargo Temp (Micro:bit)</p>
+                <div class="value"><span id="tempValue">--</span> °C</div>
+            </div>
+            <div class="data-box" id="speedBox">
+                <p>Vehicle Speed / Status</p>
+                <div class="value"><span id="speedValue">--</span></div>
+            </div>
+        </div>
+
+        <div style="max-width: 1200px; margin: 0 auto; padding: 0 15px;">
+            <div class="card-box">
+                <h3>📈 Live Temperature Telemetry Stream</h3>
+                <div class="chart-scroll-wrapper">
+                    <div class="chart-inner-container">
+                        <canvas id="tempLineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-container" style="padding-top: 0;">
+            <div class="card-box">
+                <h3>📅 Dispatched Route & Tasks (Cloud Synced)</h3>
+                <ul id="scheduleList" class="schedule-list">
+                    <li style="color:#888;">Waiting for central brain dispatch...</li>
+                </ul>
+            </div>
+
+            <div class="card-box">
+                <h3>🗺️ Live Map Navigation</h3>
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: Vehicle Controls -->
+    <div id="tab2" class="tab-content">
+        <div class="control-container">
+            <button class="emergency-btn" onclick="sendCommand('STOP')">🚨 EMERGENCY STOP</button>
+
+            <div class="mode-group">
+                <button class="mode-btn btn-mode-a" onclick="sendCommand('START_A')">▶️ Mode A<br><small>(Full Speed Ahead)</small></button>
+                <button class="mode-btn btn-mode-b" onclick="sendCommand('START_B')">⏱️ Mode B<br><small>(Stop-and-Go)</small></button>
+            </div>
+
+            <div class="card-box" style="text-align: center;">
+                <h3 style="margin-bottom: 20px;">🎮 Maqueen Steering Panel</h3>
+                
+                <div class="joystick-panel">
+                    <button id="btnLgTop" class="dir-btn-lg" onclick="sendCommand('DIR_FWD')">▲<br>FWD</button>
+                    <button id="btnLgLeft" class="dir-btn-lg" onclick="sendCommand('DIR_LEFT')">◄<br>LEFT</button>
+                    <button id="btnLgRight" class="dir-btn-lg" onclick="sendCommand('DIR_RIGHT')">►<br>RIGHT</button>
+                    <button id="btnLgBottom" class="dir-btn-lg" onclick="sendCommand('DIR_BACK')">▼<br>REV</button>
+
+                    <div class="inner-circle-group">
+                        <div></div>
+                        <button class="step-btn-sm" onclick="sendCommand('STEP_FWD')">▲</button>
+                        <div></div>
+                        <button class="step-btn-sm" onclick="sendCommand('STEP_LEFT')">◄</button>
+                        <button class="center-stop-btn" onclick="sendCommand('STOP')">■</button>
+                        <button class="step-btn-sm" onclick="sendCommand('STEP_RIGHT')">►</button>
+                        <div></div>
+                        <button class="step-btn-sm" onclick="sendCommand('STEP_BACK')">▼</button>
+                        <div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p id="status" style="color: #888; margin-top: 15px; font-size: 0.9rem; text-align:center;">Status: Waiting for Bluetooth connection...</p>
+    
+    <div class="debug-console" id="debugLog">📌 Central Cloud System Ready...</div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const RENDER_API = "https://smartlogis.onrender.com";
+        const CAR_ID = "CAR_01";
+
+        function switchTab(idx) {
+            document.querySelectorAll('.tab-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx - 1));
+            document.querySelectorAll('.tab-content').forEach((content, i) => content.classList.toggle('active', i === idx - 1));
+        }
+
+        const UART_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+        const UART_TX_CHARACTERISTIC_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; 
+        const UART_RX_CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; 
+
+        let rxCharacteristic = null;
+        let isBluetoothConnected = false; 
+        let currentTemp = 0;
+        let currentSpeed = 0;
+        let currentLat = 4.3167; 
+        let currentLng = 101.1500;
+        let map = null;
+        let carMarker = null;
+        let dataBuffer = "";
+
+        let dynamicTasks = []; // Holds cloud-dispatched tasks
+
+        // Chart.js Setup
+        const ctx = document.getElementById('tempLineChart').getContext('2d');
+        const tempLineChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Live Cargo Temp (°C)',
+                    data: [],
+                    borderColor: '#00ffcc',
+                    backgroundColor: 'rgba(0, 255, 204, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+                    y: { ticks: { color: '#888' }, grid: { color: '#333' } }
+                }
+            }
+        });
+
+        function logDebug(msg) {
+            const consoleBox = document.getElementById('debugLog');
+            const time = new Date().toLocaleTimeString();
+            consoleBox.innerHTML = `[${time}] ${msg}<br>` + consoleBox.innerHTML;
+        }
+
+        // 1. Polling: Upload Telemetry & Stream Dynamic Charts
+        setInterval(() => {
+            if (!isBluetoothConnected) return;
+
+            const timeNow = new Date().toLocaleTimeString();
+            
+            tempLineChart.data.labels.push(timeNow);
+            tempLineChart.data.datasets[0].data.push(currentTemp);
+            if (tempLineChart.data.labels.length > 15) {
+                tempLineChart.data.labels.shift();
+                tempLineChart.data.datasets[0].data.shift();
+            }
+            tempLineChart.update();
+
+            const payload = {
+                car_id: CAR_ID,
+                temp: currentTemp,
+                speed: currentSpeed,
+                lat: currentLat,
+                lng: currentLng,
+                createdAt: new Date().toISOString()
+            };
+
+            saveToMongoDBDirectly(payload);
+        }, 3000);
+
+        // 2. Polling: Auto-pull Dispatched Tasks from Central Brain Dashboard
+        setInterval(async () => {
+            try {
+                const response = await fetch(`${RENDER_API}/api/tasks/my_task?car_id=${CAR_ID}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === "SUCCESS" && data.task && data.task.tasks) {
+                        dynamicTasks = data.task.tasks;
+                        renderSchedule();
+                    }
+                }
+            } catch (err) {
+                console.warn("Task pull error:", err);
+            }
+        }, 5000);
+
+        async function saveToMongoDBDirectly(payload) {
+            try {
+                const response = await fetch(`${RENDER_API}/api/upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    document.getElementById('dbStatus').innerText = "🟢 Synced to MongoDB";
+                    logDebug(`✅ Upload Success: Temp=${payload.temp}°C, Speed=${payload.speed}`);
+                } else {
+                    document.getElementById('dbStatus').innerText = "🔴 Server Rejected";
+                }
+            } catch (err) {
+                document.getElementById('dbStatus').innerText = "🔴 Network Error";
+            }
+        }
+
+        // Bluetooth Setup
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('connectBtn');
+            const statusTxt = document.getElementById('status');
+
+            try {
+                btn.disabled = true;
+                btn.innerText = "⏳ Searching Vehicle...";
+
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { namePrefix: 'BBC micro:bit' },
+                        { namePrefix: 'micro:bit' }
+                    ],
+                    optionalServices: [UART_SERVICE_UUID]
+                });
+
+                btn.innerText = "⏳ Connecting...";
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(UART_SERVICE_UUID);
+                
+                const txChar = await service.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
+                await txChar.startNotifications();
+
+                try {
+                    rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
+                } catch(e) {
+                    logDebug("⚠️ RX Channel unavailable");
+                }
+
+                isBluetoothConnected = true;
+
+                btn.disabled = false;
+                btn.innerText = "✅ Bluetooth Connected";
+                btn.style.background = "#10b981";
+                statusTxt.innerText = "Status: 🟢 Connected to Micro:bit. Cloud Telemetry Live.";
+                document.getElementById('dbStatus').innerText = "🟡 Syncing...";
+
+                txChar.addEventListener('characteristicvaluechanged', (event) => {
+                    let value = new TextDecoder().decode(event.target.value);
+                    dataBuffer += value;
+                    
+                    let lines = dataBuffer.split('\n');
+                    dataBuffer = lines.pop();
+
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (!line) continue;
+                        try {
+                            let data = JSON.parse(line);
+                            currentTemp = data.t !== undefined ? data.t : currentTemp;
+                            currentSpeed = data.s !== undefined ? data.s : currentSpeed;
+
+                            document.getElementById('tempValue').innerText = currentTemp;
+                            document.getElementById('speedValue').innerText = currentSpeed > 0 ? `Moving (${currentSpeed})` : "Stopped (0)";
+
+                            if (currentTemp >= 32) {
+                                document.getElementById('tempBox').style.border = "2px solid red";
+                                triggerEmergencyProtocol(`Cargo Temp CRITICAL: ${currentTemp}°C!`);
+                            } else {
+                                document.getElementById('tempBox').style.border = "none";
+                            }
+
+                            if (data.e === 1) {
+                                triggerEmergencyProtocol("Obstacle < 10cm! Emergency brake engaged.");
+                            }
+
+                        } catch (e) {}
+                    }
+                });
+            } catch (error) {
+                isBluetoothConnected = false;
+                btn.disabled = false;
+                btn.innerText = "1. Connect Vehicle Bluetooth";
+                btn.style.background = "#007bff";
+                statusTxt.innerText = "❌ Connection Failed: " + error.message;
+            }
+        });
+
+        async function sendCommand(cmdString) {
+            if (!rxCharacteristic || !isBluetoothConnected) {
+                alert("Please connect vehicle Bluetooth first!");
+                return;
+            }
+            try {
+                const encoder = new TextEncoder();
+                await rxCharacteristic.writeValue(encoder.encode(cmdString + "\n"));
+                logDebug(`🎮 Sent Command: ${cmdString}`);
+            } catch (error) {
+                logDebug(`❌ Command Failed: ${error.message}`);
+            }
+        }
+
+        function requestGPSLocation() {
+            if ("geolocation" in navigator) {
+                logDebug("📍 Requesting Location Access...");
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        updateLocation(pos.coords.latitude, pos.coords.longitude);
+                        logDebug(`✅ GPS Fixed: Lat=${currentLat.toFixed(4)}, Lng=${currentLng.toFixed(4)}`);
+                    },
+                    err => logDebug(`⚠️ GPS Failed (${err.code}): Using defaults`),
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+
+                navigator.geolocation.watchPosition(
+                    pos => updateLocation(pos.coords.latitude, pos.coords.longitude),
+                    err => {},
+                    { enableHighAccuracy: true, maximumAge: 1000 }
+                );
+            }
+        }
+
+        function updateLocation(lat, lng) {
+            currentLat = lat;
+            currentLng = lng;
+            if (carMarker && map) {
+                carMarker.setLatLng([currentLat, currentLng]);
+                map.panTo([currentLat, currentLng]);
+            }
+        }
+
+        function initMap() {
+            if (map) return;
+            map = L.map('map').setView([currentLat, currentLng], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            carMarker = L.marker([currentLat, currentLng]).addTo(map).bindPopup(`Vehicle ${CAR_ID}`).openPopup();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            requestGPSLocation();
+        });
+
+        function startTask() {
+            requestGPSLocation();
+            logDebug("🔄 Requesting latest dispatch from cloud...");
+        }
+
+        function renderSchedule() {
+            const listEl = document.getElementById('scheduleList');
+            if (!dynamicTasks || dynamicTasks.length === 0) {
+                listEl.innerHTML = `<li style="color:#888; text-align:center;">No cloud tasks assigned yet. Run Engine on Dashboard.</li>`;
+                return;
+            }
+
+            listEl.innerHTML = dynamicTasks.map((t, idx) => `
+                <li class="schedule-item ${t.completed ? 'completed' : ''}">
+                    <div>
+                        <div style="font-size:0.85rem; color:#00ffcc;">⏰ Stop #${idx + 1} - ${t.Route_ID || 'Delivery Route'}</div>
+                        <div class="task-text">${t.Origin || 'Depot'} ➔ ${t.Destination || 'Customer Node'}</div>
+                        <div style="font-size:0.75rem; color:#aaa;">Dist: ${t.Distance_km || '--'} km | Vehicle: ${t.Vehicle_Type || 'Reefer'}</div>
+                    </div>
+                    <button class="btn-done" onclick="toggleTask(${idx})">
+                        ${t.completed ? '✅ Done' : 'Mark Done'}
+                    </button>
+                </li>
+            `).join('');
+        }
+
+        function toggleTask(idx) {
+            if (dynamicTasks[idx]) {
+                dynamicTasks[idx].completed = !dynamicTasks[idx].completed;
+                renderSchedule();
+            }
+        }
+
+        function triggerEmergencyProtocol(msg) {
+            document.getElementById('emergencyMsg').innerText = "⚠️ " + msg;
+            document.getElementById('emergencyAlert').style.display = "flex";
+        }
+
+        function acceptNewRoute() {
+            document.getElementById('emergencyAlert').style.display = "none";
+        }
+        // 🎯 获取当前司机选择的车牌号
+        function getSelectedCarId() {
+            const input = document.getElementById('driverCarIdSelect');
+            return input ? input.value.trim().toUpperCase() : "REE_001";
+        }
+
+        // 1. 轮询：定期向云端上传传感器数据
+        setInterval(() => {
+            if (!isBluetoothConnected) return;
+
+            const timeNow = new Date().toLocaleTimeString();
+            
+            tempLineChart.data.labels.push(timeNow);
+            tempLineChart.data.datasets[0].data.push(currentTemp);
+            if (tempLineChart.data.labels.length > 15) {
+                tempLineChart.data.labels.shift();
+                tempLineChart.data.datasets[0].data.shift();
+            }
+            tempLineChart.update();
+
+            const payload = {
+                car_id: getSelectedCarId(), // 👈 动态获取司机选择的车牌
+                temp: currentTemp,
+                speed: currentSpeed,
+                lat: currentLat,
+                lng: currentLng,
+                createdAt: new Date().toISOString()
+            };
+
+            saveToMongoDBDirectly(payload);
+        }, 3000);
+
+        // 2. 轮询：自动按【当前车牌】拉取派发的专属任务
+        setInterval(pullMyDispatchedTasks, 5000);
+// 记录上一次渲染的任务数量，避免重复跳动
+    let lastTaskCount = -1;
+
+    async function pullMyDispatchedTasks() {
+        const carId = getSelectedCarId();
+        try {
+            const response = await fetch(`${RENDER_API}/api/tasks/my_task?car_id=${carId}`);
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.status === "SUCCESS" && data.task && Array.isArray(data.task.tasks)) {
+                    // 🎯 核心修复 1：前端二次强力过滤，确保只保留【 Vehicle_ID === 当前车牌 】的任务
+                    const filteredTasks = data.task.tasks.filter(t => {
+                        const vId = (t.Vehicle_ID || t.car_id || "").toString().trim().toUpperCase();
+                        return vId === carId.toUpperCase();
+                    });
+
+                    // 只有当任务列表真的发生变化时才更新页面，彻底防止界面闪烁
+                    if (filteredTasks.length !== lastTaskCount) {
+                        dynamicTasks = filteredTasks;
+                        lastTaskCount = filteredTasks.length;
+                        renderSchedule();
+                    }
+                } else if (data.status === "EMPTY") {
+                    if (lastTaskCount !== 0) {
+                        dynamicTasks = [];
+                        lastTaskCount = 0;
+                        renderSchedule();
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Task pull error:", err);
+        }
+    }
+
+        // 3. 渲染路线清单
+        function renderSchedule() {
+            const listEl = document.getElementById('scheduleList');
+            if (!dynamicTasks || dynamicTasks.length === 0) {
+                listEl.innerHTML = `<li style="color:#888; text-align:center; padding: 15px;">No cloud tasks assigned for [${getSelectedCarId()}] yet.</li>`;
+                return;
+            }
+
+            listEl.innerHTML = dynamicTasks.map((t, idx) => `
+                <li class="schedule-item ${t.completed ? 'completed' : ''}">
+                    <div>
+                        <div style="font-size:0.85rem; color:#00ffcc;">⏰ Stop #${idx + 1} - ${t.Route_ID || 'Delivery Leg'} (${t.Vehicle_ID || getSelectedCarId()})</div>
+                        <div class="task-text">${t.From || t.Origin || 'Hub'} ➔ ${t.To || t.Destination || 'Customer'}</div>
+                        <div style="font-size:0.75rem; color:#aaa;">Dist: ${t['Distance (km)'] || t.Distance_km || '--'} km | Time: ${t['Time (h)'] || '--'} h</div>
+                    </div>
+                    <button class="btn-done" onclick="toggleTask(${idx})">
+                        ${t.completed ? '✅ Done' : 'Mark Done'}
+                    </button>
+                </li>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
